@@ -26,6 +26,8 @@
 #include <multipass/format.h>
 
 #include <iostream>
+#include <vector>
+#include <filesystem>
 
 namespace mp = multipass;
 namespace mpl = multipass::logging;
@@ -42,12 +44,14 @@ auto run_cmd(mp::SSHSession& session, std::string&& cmd, Callable&& error_handle
     return ssh_process.read_std_output();
 }
 
+// Run a command on a given SSH session.
 auto run_cmd(mp::SSHSession& session, std::string&& cmd)
 {
     auto error_handler = [](mp::SSHProcess& proc) { throw std::runtime_error(proc.read_std_error()); };
     return run_cmd(session, std::forward<std::string>(cmd), error_handler);
 }
 
+// Check if sshfs exists on a given SSH session.
 void check_sshfs_exists(mp::SSHSession& session)
 {
     auto error_handler = [](mp::SSHProcess& proc) {
@@ -64,6 +68,26 @@ void make_target_dir(mp::SSHSession& session, const std::string& target)
     run_cmd(session, fmt::format("sudo mkdir -p \"{}\"", target));
 }
 
+// Split a path string in pieces.
+void split_path(const std::string& path, std::vector<std::string>& splitting)
+{
+    std::string dir;
+
+    for (char c: path)
+    {
+        if (('\\' == c || '/' == c) && !dir.empty())
+        {
+            splitting.push_back(dir);
+        }
+        dir.push_back('\\' == c ? '/' : c);
+    }
+
+    splitting.push_back(dir);
+
+    return;
+}
+
+// Set ownership of a directory. Assume it is already created.
 void set_owner_for(mp::SSHSession& session, const std::string& target)
 {
     auto vm_user = run_cmd(session, "id -nu");
@@ -81,8 +105,19 @@ auto make_sftp_server(mp::SSHSession&& session, const std::string& source, const
              fmt::format("{}:{} {}(source = {}, target = {}, …): ", __FILE__, __LINE__, __FUNCTION__, source, target));
 
     check_sshfs_exists(session);
-    make_target_dir(session, target);
-    set_owner_for(session, target);
+
+    std::vector<std::string> splitting;
+    split_path(target, splitting);
+    bool needs_create = false;
+    for (std::string partial: splitting)
+    {
+        if (needs_create || !std::filesystem::exists(partial))
+        {
+            needs_create = true;
+            make_target_dir(session, partial);
+            set_owner_for(session, partial);
+        }
+    }
 
     auto output = run_cmd(session, "id -u");
     mpl::log(mpl::Level::debug, category,
