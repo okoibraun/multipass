@@ -25,9 +25,9 @@
 
 #include <multipass/format.h>
 
+#include <filesystem>
 #include <iostream>
 #include <vector>
-#include <filesystem>
 
 namespace mp = multipass;
 namespace mpl = multipass::logging;
@@ -73,7 +73,7 @@ void split_path(const std::string& path, std::vector<std::string>& splitting)
 {
     std::string dir;
 
-    for (char c: path)
+    for (char c : path)
     {
         if (('\\' == c || '/' == c) && !dir.empty())
         {
@@ -109,7 +109,7 @@ auto make_sftp_server(mp::SSHSession&& session, const std::string& source, const
     std::vector<std::string> splitting;
     split_path(target, splitting);
     bool needs_create = false;
-    for (std::string partial: splitting)
+    for (std::string partial : splitting)
     {
         if (needs_create || !std::filesystem::exists(partial))
         {
